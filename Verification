@@ -1,0 +1,64 @@
+from flask import Flask, request, redirect, url_for, render_template, flash
+from flask_mail import Mail, Message
+import os
+import random
+import string
+
+app = Flask(__name__)
+app.secret_key = os.urandom(24)
+
+# Настройка Flask-Mail
+app.config['MAIL_SERVER'] = 'smtp.example.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = 'your_email@example.com'
+app.config['MAIL_PASSWORD'] = 'your_password'
+app.config['MAIL_DEFAULT_SENDER'] = 'your_email@example.com'
+
+mail = Mail(app)
+
+# Хранение пользователей и кодов подтверждения (в реальном приложении используйте базу данных)
+users = {}
+verification_codes = {}
+
+# Генерация случайного кода подтверждения
+def generate_verification_code(length=6):
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        email = request.form['email']
+        if email in users:
+            flash('Email уже зарегистрирован.', 'error')
+        else:
+            code = generate_verification_code()
+            verification_codes[email] = code
+
+            msg = Message('Подтверждение Email', recipients=[email])
+            msg.body = f'Ваш код подтверждения: {code}'
+            mail.send(msg)
+            flash('Письмо с кодом подтверждения отправлено.', 'info')
+
+            return redirect(url_for('verify', email=email))
+    return render_template('register.html')
+
+@app.route('/verify', methods=['GET', 'POST'])
+def verify():
+    email = request.args.get('email')
+    if request.method == 'POST':
+        code = request.form['code']
+        if verification_codes.get(email) == code:
+            users[email] = True
+            flash('Email подтвержден.', 'success')
+            return redirect(url_for('success'))
+        else:
+            flash('Неправильный код подтверждения.', 'error')
+    return render_template('verify.html', email=email)
+
+@app.route('/success')
+def success():
+    return 'Email успешно подтвержден!'
+
+if __name__ == '__main__':
+    app.run(debug=True)
